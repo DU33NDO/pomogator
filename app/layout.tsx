@@ -1,6 +1,10 @@
+import type React from "react";
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Azeret_Mono as Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { Button } from "@/components/ui/button";
+import { Shapes } from "lucide-react";
+import Link from "next/link";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -23,11 +27,41 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {children}
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
+      <body className="antialiased">
+        <div className="flex flex-col min-h-screen">
+          <header className="sticky top-0 z-50 w-full border-b border-gray-100 bg-white/80 backdrop-blur-sm">
+            <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+              <Link className="flex items-center space-x-4" href="/">
+                <Shapes className="h-8 w-8" />
+                <span className="font-bold text-xl">Pomogator</span>
+              </Link>
+              <nav className="hidden md:flex items-center space-x-6">
+                <Link
+                  href="/dashboard"
+                  className="text-sm text-gray-600 hover:text-gray-900"
+                >
+                  Dashboard
+                </Link>
+                <Link
+                  href="/assignments"
+                  className="text-sm text-gray-600 hover:text-gray-900"
+                >
+                  Assignments
+                </Link>
+                <Link
+                  href="/teams"
+                  className="text-sm text-gray-600 hover:text-gray-900"
+                >
+                  Teams
+                </Link>
+                <Button variant="outline">Sign In</Button>
+                <Button>Get Started</Button>
+              </nav>
+            </div>
+          </header>
+          <main className="flex-grow">{children}</main>
+        </div>
       </body>
     </html>
   );
