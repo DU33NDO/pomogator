@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import axios from "axios";
+import jwt from "jsonwebtoken";
+import jwtDecode from "jwt-decode";
 import {
   Select,
   SelectContent,
@@ -12,167 +14,278 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useAuth } from "@/contexts/AuthContext";
 
-const classes = [
-  { id: "1", name: "Math 101" },
-  { id: "2", name: "Algebra II" },
-  { id: "3", name: "Geometry" },
-];
+interface Group {
+  id: string;
+  name: string;
+}
+
+interface Assignment {
+  id: string;
+  description: string;
+  deadline: string;
+  teacherId: string;
+  groupId: string;
+  teacher: {
+    username: string;
+  };
+  group: {
+    name: string;
+  };
+}
+
+interface User {
+  id: string;
+  email: string;
+  role: string;
+}
+
+interface AuthContextType {
+  user: User | null;
+  login: (accessToken: string, refreshToken: string) => void;
+  logout: () => void;
+}
 
 export default function AssignmentsPage() {
-  const [files, setFiles] = useState<
-    {
-      task_id: string;
-      file: string;
-      teacherName: string;
-      groupName: string;
-      deadline: string;
-      description: string;
-    }[]
-  >([]);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [selectedClass, setSelectedClass] = useState("");
-  const [teacherName, setTeacherName] = useState("");
+  const { user } = useAuth();
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Form states
+  const [selectedGroup, setSelectedGroup] = useState("");
   const [deadline, setDeadline] = useState("");
   const [description, setDescription] = useState("");
-  const [uploading, setUploading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    fetchFiles();
-  }, []);
+    const initializePage = async () => {
+      if (user) {
+        await fetchAssignments();
+        if (user.role === "TEACHER") {
+          await fetchGroups();
+        }
+      }
+      setLoading(false);
+    };
 
-  const fetchFiles = async () => {
-    const res = await fetch("/api/assignments");
-    const data = await res.json();
-    setFiles(data);
+    initializePage();
+  }, [user]);
+
+  const fetchAssignments = async () => {
+    try {
+      const token = localStorage.getItem("accessToken");
+      const response = await axios.get(`/api/assignments?userId=${user?.id}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      setAssignments(response.data);
+    } catch (error) {
+      console.error("Error fetching assignments:", error);
+    }
   };
 
-  const handleFileUpload = async () => {
-    if (!selectedFile || !selectedClass || !teacherName || !deadline) return;
-    setUploading(true);
-
-    const formData = new FormData();
-    formData.append("file", selectedFile);
-    formData.append("groupName", selectedClass);
-    formData.append("teacherName", teacherName);
-    formData.append("deadline", deadline);
-    formData.append("description", description);
-
+  const fetchGroups = async () => {
     try {
-      const res = await axios.post("/api/assignments", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
+      const token = localStorage.getItem("accessToken");
+      const response = await axios.get("/api/groups", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      setGroups(response.data);
+    } catch (error) {
+      console.error("Error fetching groups:", error);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!selectedGroup || !deadline || !description || !user) {
+      console.log("Missing required data:", {
+        selectedGroup,
+        deadline,
+        description,
+      });
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const token = localStorage.getItem("accessToken");
+      const formattedDeadline = new Date(deadline).toISOString();
+
+      // Get the decoded token to get the user's ID
+      const decodedToken = jwt.decode(token as string) as {
+        userId: string;
+      } | null;
+      const teacherId = decodedToken?.userId;
+
+      if (!teacherId) {
+        console.error("Teacher ID not found in token");
+        return;
+      }
+
+      const payload = {
+        teacherId,
+        groupId: selectedGroup,
+        deadline: formattedDeadline,
+        description,
+      };
+
+      console.log("Sending payload:", payload);
+
+      const response = await axios.post("/api/assignments", payload, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
       });
 
-      if (res.status === 200) {
-        fetchFiles();
-        setSelectedFile(null);
-        setSelectedClass("");
-        setTeacherName("");
+      if (response.status === 201) {
+        await fetchAssignments();
+        // Reset form
+        setSelectedGroup("");
         setDeadline("");
         setDescription("");
       }
     } catch (error) {
-      console.error("Upload error:", error);
+      console.error("Submission error:", error);
+      if (axios.isAxiosError(error)) {
+        console.error("Error details:", error.response?.data);
+      }
     } finally {
-      setUploading(false);
+      setSubmitting(false);
     }
   };
 
-  const handleDelete = async (taskId: string) => {
+  const handleDelete = async (assignmentId: string) => {
     try {
-      await axios.delete(`/api/assignments/${taskId}`);
-      fetchFiles();
+      const token = localStorage.getItem("accessToken");
+      await axios.delete(`/api/assignments/${assignmentId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      await fetchAssignments();
     } catch (error) {
       console.error("Error deleting assignment:", error);
     }
   };
 
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        Loading...
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gray-100 mt-16">
-      <div className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold mb-6">Assignments & File Upload</h1>
-        <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-          <label className="block text-sm font-medium text-gray-700">
-            Select Class
-          </label>
-          <Select value={selectedClass} onValueChange={setSelectedClass}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select a class" />
-            </SelectTrigger>
-            <SelectContent>
-              {classes.map((cls) => (
-                <SelectItem key={cls.id} value={cls.name}>
-                  {cls.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <label className="block text-sm font-medium text-gray-700 mt-4">
-            Teacher Name
-          </label>
-          <Input
-            value={teacherName}
-            onChange={(e) => setTeacherName(e.target.value)}
-          />
-          <label className="block text-sm font-medium text-gray-700 mt-4">
-            Deadline
-          </label>
-          <Input
-            type="date"
-            value={deadline}
-            onChange={(e) => setDeadline(e.target.value)}
-          />
-          <label className="block text-sm font-medium text-gray-700 mt-4">
-            Assignment Description
-          </label>
-          <Textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className="min-h-[100px]"
-          />
-          <input
-            type="file"
-            onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
-            className="mt-4"
-          />
-          <Button
-            onClick={handleFileUpload}
-            disabled={!selectedFile || uploading}
-            className="mt-4"
-          >
-            {uploading ? "Uploading..." : "Upload File"}
-          </Button>
-        </div>
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-2xl font-bold mb-4">Uploaded Assignments</h2>
-          <ul>
-            {files.map((file) => (
-              <li
-                key={file.task_id}
-                className="flex justify-between items-center mb-2"
+    <div className="min-h-screen bg-gray-100 p-8">
+      <div className="max-w-6xl mx-auto">
+        <h1 className="text-3xl font-bold mb-8">Assignments</h1>
+
+        {user?.role === "TEACHER" && (
+          <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+            <h2 className="text-xl font-semibold mb-6">
+              Create New Assignment
+            </h2>
+            <div className="space-y-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select Group
+                </label>
+                <Select value={selectedGroup} onValueChange={setSelectedGroup}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose a group" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {groups.map((group) => (
+                      <SelectItem key={group.id} value={group.id}>
+                        {group.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Deadline
+                </label>
+                <Input
+                  type="datetime-local"
+                  value={deadline}
+                  onChange={(e) => setDeadline(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Description
+                </label>
+                <Textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="min-h-[100px]"
+                  placeholder="Enter assignment description..."
+                />
+              </div>
+
+              <Button
+                onClick={handleSubmit}
+                disabled={
+                  !selectedGroup || !deadline || !description || submitting
+                }
+                className="w-full"
               >
-                <div>
-                  <a
-                    href={file.file}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-500"
-                  >
-                    {file.description}
-                  </a>
-                  <p className="text-sm text-gray-600">
-                    {file.teacherName} | {file.groupName} | Due: {file.deadline}
-                  </p>
-                </div>
-                <Button
-                  onClick={() => handleDelete(file.task_id)}
-                  variant="destructive"
+                {submitting ? "Creating..." : "Create Assignment"}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <h2 className="text-xl font-semibold mb-6">
+            {user?.role === "TEACHER"
+              ? "Published Assignments"
+              : "Your Assignments"}
+          </h2>
+
+          {assignments.length === 0 ? (
+            <p className="text-gray-500 text-center py-4">
+              No assignments found.
+            </p>
+          ) : (
+            <ul className="space-y-4">
+              {assignments.map((assignment) => (
+                <li
+                  key={assignment.id}
+                  className="flex justify-between items-center p-4 border rounded-lg hover:bg-gray-50"
                 >
-                  Delete
-                </Button>
-              </li>
-            ))}
-          </ul>
+                  <div className="space-y-1">
+                    <p className="font-medium">{assignment.description}</p>
+                    <p className="text-sm text-gray-600">
+                      Group: {assignment.group.name} | Due:{" "}
+                      {new Date(assignment.deadline).toLocaleString()}
+                    </p>
+                  </div>
+
+                  {user?.role === "TEACHER" && (
+                    <Button
+                      onClick={() => handleDelete(assignment.id)}
+                      variant="destructive"
+                      size="sm"
+                    >
+                      Delete
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </div>
     </div>

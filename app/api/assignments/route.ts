@@ -1,17 +1,83 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
-import { Storage } from "@google-cloud/storage";
+import jwt from "jsonwebtoken";
+import jwtDecode from "jwt-decode";
+import bcrypt from "bcryptjs";
 import { v4 as uuidv4 } from "uuid";
 
 const prisma = new PrismaClient();
-const storage = new Storage();
-const bucketName = process.env.GOOGLE_CLOUD_BUCKET_NAME!;
 
-export async function GET() {
+const verifyAuth = (request: NextRequest) => {
   try {
-    const assignments = await prisma.assignment.findMany();
-    return NextResponse.json(assignments);
+    const token = request.headers.get("authorization")?.split(" ")[1];
+    if (!token) return null;
+
+    return jwt.verify(token, process.env.JWT_SECRET || "your-secret-key") as {
+      userId: string;
+      role: string;
+    };
   } catch (error) {
+    return null;
+  }
+};
+
+export async function GET(req: NextRequest) {
+  const auth = verifyAuth(req);
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const { searchParams } = new URL(req.url);
+    const userId = searchParams.get("userId");
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: "User ID is required" },
+        { status: 400 }
+      );
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { group: true },
+    });
+
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    if (user.role === "TEACHER") {
+      const assignments = await prisma.assignment.findMany({
+        where: { teacherId: userId },
+        include: {
+          group: true,
+          teacher: {
+            select: { username: true },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+      return NextResponse.json(assignments);
+    }
+
+    if (user.role === "STUDENT" && user.groupId) {
+      const assignments = await prisma.assignment.findMany({
+        where: { groupId: user.groupId },
+        include: {
+          group: true,
+          teacher: {
+            select: { username: true },
+          },
+        },
+        orderBy: { deadline: "asc" },
+      });
+      return NextResponse.json(assignments);
+    }
+
+    return NextResponse.json([]);
+  } catch (error) {
+    console.error("Error fetching assignments:", error);
     return NextResponse.json(
       { error: "Failed to fetch assignments" },
       { status: 500 }
@@ -19,93 +85,54 @@ export async function GET() {
   }
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(request: NextRequest) {
+  const auth = verifyAuth(request);
+  if (!auth || auth.role !== "TEACHER") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    const formData = await req.formData();
-    const file = formData.get("file") as File | null;
-    if (!file || !(file instanceof File)) {
-      console.log("File is missing or invalid:", file);
-      return NextResponse.json(
-        { error: "Invalid file upload" },
-        { status: 400 }
-      );
-    }
-    const teacherName = formData.get("teacherName") as string;
-    const groupName = formData.get("groupName") as string;
-    const deadline = formData.get("deadline") as string;
-    const description = formData.get("description") as string;
+    const body = await request.json();
+    const { teacherId, groupId, deadline, description } = body;
 
-    if (!file || !teacherName || !groupName || !deadline) {
-      console.log(
-        `FILE: ${file}; Teacher: ${teacherName}; Group: ${groupName}; Deadline: ${deadline}; Description: ${description}`
-      );
-      return NextResponse.json(
-        { error: "Missing required fields" },
-        { status: 400 }
-      );
-    }
-
-    const fileBuffer = Buffer.from(await file.arrayBuffer());
-    const fileName = `${uuidv4()}-${file.name}`;
-    const bucket = storage.bucket(bucketName);
-    const blob = bucket.file(fileName);
-
-    await blob.save(fileBuffer, {
-      contentType: file.type,
-      resumable: false,
+    console.log("Received data:", {
+      teacherId,
+      groupId,
+      deadline,
+      description,
     });
 
-    const fileUrl = `https://storage.googleapis.com/${bucketName}/${fileName}`;
+    if (!teacherId || !groupId || !deadline || !description) {
+      return NextResponse.json(
+        {
+          error: "Missing required fields",
+          received: { teacherId, groupId, deadline, description },
+        },
+        { status: 400 }
+      );
+    }
 
+    // Create new assignment
     const newAssignment = await prisma.assignment.create({
       data: {
-        file: fileUrl,
-        teacherName,
-        groupName,
+        teacherId,
+        groupId,
         deadline: new Date(deadline),
         description,
+      },
+      include: {
+        group: true,
+        teacher: {
+          select: { username: true },
+        },
       },
     });
 
     return NextResponse.json(newAssignment, { status: 201 });
   } catch (error) {
+    console.error("Assignment creation error:", error);
     return NextResponse.json(
       { error: "Failed to create assignment" },
-      { status: 500 }
-    );
-  }
-}
-
-export async function DELETE(req: NextRequest) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const id = searchParams.get("id");
-    if (!id) {
-      return NextResponse.json(
-        { error: "Missing assignment ID" },
-        { status: 400 }
-      );
-    }
-
-    const assignment = await prisma.assignment.findUnique({ where: { id } });
-    if (!assignment) {
-      return NextResponse.json(
-        { error: "Assignment not found" },
-        { status: 404 }
-      );
-    }
-
-    const fileName = assignment.file.split("/").pop();
-    const bucket = storage.bucket(bucketName);
-    const blob = bucket.file(fileName!);
-    await blob.delete();
-
-    await prisma.assignment.delete({ where: { id } });
-
-    return NextResponse.json({ message: "Assignment deleted successfully" });
-  } catch (error) {
-    return NextResponse.json(
-      { error: "Failed to delete assignment" },
       { status: 500 }
     );
   }
