@@ -1,8 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import axios from "axios";
-
+import api from "@/utils/api";
 interface User {
   _id: string;
   username: string;
@@ -28,8 +27,17 @@ export default function TeamsPage() {
   useEffect(() => {
     const fetchGroups = async () => {
       try {
-        const { data } = await axios.get("/api/groups");
-        setGroups(data);
+        if (typeof window !== 'undefined') {
+          const token = localStorage.getItem("accessToken");
+          if (token) {
+            const payload = JSON.parse(atob(token.split(".")[1]));
+            if (payload.userId) {
+              console.log("payload", payload);
+              const response = await api.get(`/groups?userId=${payload.userId}`);
+              setGroups(response.data);
+            }
+          }
+        }
       } catch (err) {
         setError("Error loading groups");
         console.error("Error fetching groups:", err);
