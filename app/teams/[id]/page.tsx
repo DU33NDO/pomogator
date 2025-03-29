@@ -6,6 +6,15 @@ import { Button } from "@/components/ui/button";
 import api from "@/lib/api";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import axios from "axios";
 
 interface Assignment {
   _id: string;
@@ -25,31 +34,63 @@ export default function TeamAssignments() {
   const params = useParams();
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const token = localStorage.getItem("accessToken");
+
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [deadline, setDeadline] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    const fetchAssignments = async () => {
-      try {
-        const response = await api.get(`/groups/${params.id}/assignments`);
-        setAssignments(response.data.assignments);
-      } catch (error) {
-        console.error("Error fetching assignments:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
+    fetchAssignments();
+  }, [params.id]);
 
-    if (user?.role === "STUDENT") {
-      fetchAssignments();
+  const fetchAssignments = async () => {
+    try {
+      const response = await api.get(`/groups/${params.id}/assignments`);
+      setAssignments(response.data.assignments);
+    } catch (error) {
+      console.error("Error fetching assignments:", error);
+    } finally {
+      setLoading(false);
     }
-  }, [params.id, user]);
+  };
 
-  if (user?.role !== "STUDENT") {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p className="text-gray-600">Only students can view assignments.</p>
-      </div>
-    );
-  }
+  const handleCreateAssignment = async () => {
+    if (!title || !description || !deadline) return;
+
+    setSubmitting(true);
+    try {
+      const payload = {
+        title,
+        description,
+        groupId: params.id,
+        deadline: new Date(deadline).toISOString(),
+      };
+      console.log(`CHECK: GROUP ID=${params.id}`);
+
+      await axios.post("/api/assignments", payload, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+      await fetchAssignments();
+      setIsModalOpen(false);
+      resetForm();
+    } catch (error) {
+      console.error("Error creating assignment:", error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const resetForm = () => {
+    setTitle("");
+    setDescription("");
+    setDeadline("");
+  };
 
   if (loading) {
     return (
@@ -59,17 +100,19 @@ export default function TeamAssignments() {
     );
   }
 
-  const hasSubmitted = (assignment: Assignment) => {
-    return assignment.submissions.some((sub) => sub.userId === user?.id);
-  };
-
-  const isDeadlinePassed = (deadline: string) => {
-    return new Date(deadline) < new Date();
-  };
-
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
-      <h1 className="text-2xl font-bold mb-6">Assignments</h1>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">Assignments</h1>
+        {user?.role === "TEACHER" && (
+          <Button
+            onClick={() => setIsModalOpen(true)}
+            className="bg-blue-600 hover:bg-blue-700 text-white"
+          >
+            Create Assignment
+          </Button>
+        )}
+      </div>
 
       <div className="space-y-6">
         {assignments.map((assignment) => (
@@ -84,35 +127,47 @@ export default function TeamAssignments() {
               <div className="text-sm text-gray-500">
                 Deadline: {new Date(assignment.deadline).toLocaleString()}
               </div>
+
+              <div className="text-sm text-gray-500 mt-1">
+                Submissions: {assignment.submissions.length}
+              </div>
             </div>
 
             <div className="mt-4 flex justify-end">
-              {hasSubmitted(assignment) ? (
-                <span className="text-green-600 text-sm">✓ Submitted</span>
-              ) : isDeadlinePassed(assignment.deadline) ? (
-                <span className="text-red-600 text-sm">Deadline passed</span>
-              ) : (
-                <Link href={`/assignments/${assignment._id}`}>
+              {user?.role === "TEACHER" ? (
+                <Link href={`/assignments/${assignment._id}/submissions`}>
                   <Button
                     variant="default"
                     size="sm"
-                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                    className="bg-green-600 hover:bg-green-700 text-white"
                   >
-                    Submit Assignment
+                    Check Submissions
                   </Button>
                 </Link>
+              ) : (
+                <>
+                  {assignment.submissions.some(
+                    (sub) => sub.userId === user?.id
+                  ) ? (
+                    <span className="text-green-600 text-sm">✓ Submitted</span>
+                  ) : new Date(assignment.deadline) < new Date() ? (
+                    <span className="text-red-600 text-sm">
+                      Deadline passed
+                    </span>
+                  ) : (
+                    <Link href={`/assignments/${assignment._id}`}>
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="bg-blue-600 hover:bg-blue-700 text-white"
+                      >
+                        Submit Assignment
+                      </Button>
+                    </Link>
+                  )}
+                </>
               )}
             </div>
-
-            {hasSubmitted(assignment) && (
-              <div className="mt-2 text-sm text-gray-500">
-                Submitted on:{" "}
-                {new Date(
-                  assignment.submissions.find((sub) => sub.userId === user?.id)
-                    ?.submittedAt || ""
-                ).toLocaleString()}
-              </div>
-            )}
           </div>
         ))}
 
@@ -122,6 +177,68 @@ export default function TeamAssignments() {
           </div>
         )}
       </div>
+
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <DialogContent className="sm:max-w-[525px]">
+          <DialogHeader>
+            <DialogTitle>Create New Assignment</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 mt-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Title
+              </label>
+              <Input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Assignment title..."
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Description
+              </label>
+              <Textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="min-h-[100px]"
+                placeholder="Enter assignment description..."
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Deadline
+              </label>
+              <Input
+                type="datetime-local"
+                value={deadline}
+                onChange={(e) => setDeadline(e.target.value)}
+              />
+            </div>
+
+            <div className="flex justify-end space-x-3 mt-6">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsModalOpen(false);
+                  resetForm();
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCreateAssignment}
+                disabled={!title || !description || !deadline || submitting}
+              >
+                {submitting ? "Creating..." : "Create Assignment"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
