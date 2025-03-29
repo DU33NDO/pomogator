@@ -27,13 +27,15 @@ export default function TeamsPage() {
   useEffect(() => {
     const fetchGroups = async () => {
       try {
-        if (typeof window !== 'undefined') {
+        if (typeof window !== "undefined") {
           const token = localStorage.getItem("accessToken");
           if (token) {
             const payload = JSON.parse(atob(token.split(".")[1]));
             if (payload.userId) {
               console.log("payload", payload);
-              const response = await api.get(`/groups?userId=${payload.userId}`);
+              const response = await api.get(
+                `/groups?userId=${payload.userId}`
+              );
               setGroups(response.data);
             }
           }
@@ -70,7 +72,7 @@ export default function TeamsPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {groups.map((group) => (
           <Link
-            href={`/teams/${group.slug}/chat`}
+            href={`/teams/${group.slug}`}
             key={group._id}
             className="block bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300 overflow-hidden border border-gray-200 hover:-translate-y-1 transform transition-transform"
           >
