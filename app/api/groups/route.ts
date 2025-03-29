@@ -1,110 +1,83 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from "@/lib/mongoose";
-import Group from "@/models/Group";
-import User from "@/models/User";
-import { verifyAuth } from "@/lib/auth";
-import { UserRole } from "@/models/User";
+import Group from '@/models/Group';
+import { UserRole } from '@/models/User';
+import mongoose from 'mongoose';
 
-// GET /api/groups
-// Get all groups the user is a participant in
-export async function GET(request: NextRequest) {
+// GET route to fetch all groups for a specific user ID
+export async function GET(req: NextRequest) {
   try {
-    await dbConnect();
-    const auth = verifyAuth(request);
-    
-    if (!auth) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const userId = req.nextUrl.searchParams.get('userId');
+    console.log("userId", userId);
+    if (!userId) {
+      return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
     }
-    
-    // Find all groups where the user is a participant
-    const groups = await Group.find({ 
-      "participants.userId": auth.userId 
-    }).populate({
-      path: 'participants.userId',
-      model: 'User',
-      select: 'username email _id role'
-    }).populate({
-      path: 'createdBy',
-      model: 'User',
-      select: 'username email _id'
-    });
+
+    await dbConnect();
+
+    // Convert userId to ObjectId and handle potential errors
+    let objectId;
+    try {
+      objectId = new mongoose.Types.ObjectId(userId);
+    } catch {
+      return NextResponse.json({ error: 'Invalid user ID format' }, { status: 400 });
+    }
+
+    // Log query params for debugging
+    console.log('Finding groups for userId:', userId);
+
+    // Find groups where the user is a participant with more reliable query
+    const groups = await Group.find({
+      'participants.userId': objectId
+    })
+    .populate('participants.userId', 'username email')
+    .populate('createdBy', 'username')
+    .lean();
+
+    console.log(`Found ${groups.length} groups for user`);
     
     return NextResponse.json(groups);
   } catch (error) {
-    console.error("Error fetching groups:", error);
-    return NextResponse.json(
-      { error: "Error fetching groups" },
-      { status: 500 }
-    );
+    console.error('Error fetching groups:', error);
+    return NextResponse.json({ error: 'Failed to fetch groups' }, { status: 500 });
   }
 }
 
-// POST /api/groups
-// Create a new group
-export async function POST(request: NextRequest) {
+// POST route to create a new group with the teacher as the only participant
+export async function POST(req: NextRequest) {
   try {
+    const { name, teacherId } = await req.json();
+    
+    if (!name || !teacherId) {
+      return NextResponse.json({ error: 'Group name and teacher ID are required' }, { status: 400 });
+    }
+
     await dbConnect();
-    const auth = verifyAuth(request);
-    
-    if (!auth) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    
-    // Only teachers can create groups
-    const user = await User.findById(auth.userId);
-    if (!user || user.role !== UserRole.TEACHER) {
-      return NextResponse.json(
-        { error: "Only teachers can create groups" },
-        { status: 403 }
-      );
-    }
-    
-    const { name } = await request.json();
-    
-    if (!name || typeof name !== 'string' || name.trim() === '') {
-      return NextResponse.json(
-        { error: "Valid group name is required" },
-        { status: 400 }
-      );
-    }
-    
-    // Create a new group with the creator as the first participant
-    const newGroup = await Group.create({ 
-      name: name.trim(),
-      createdBy: auth.userId,
-      participants: [{ 
-        userId: auth.userId,
-        role: UserRole.TEACHER
-      }],
-      // Slug is generated automatically in the pre-save hook
-      slug: ''
+
+    // Generate slug from name
+    const slug = name
+      .toLowerCase()
+      .replace(/[^\w ]+/g, '')
+      .replace(/ +/g, '-') + '-' + Date.now().toString().slice(-4);
+
+    // Create a new group with the teacher as a participant
+    const newGroup = await Group.create({
+      name,
+      slug,
+      createdBy: teacherId,
+      participants: [
+        {
+          userId: teacherId,
+          role: UserRole.TEACHER
+        }
+      ]
     });
-    
-    try {
-      // Populate the participants and creator fields
-      const populatedGroup = await Group.findById(newGroup._id)
-        .populate({
-          path: 'participants.userId',
-          model: 'User',
-          select: 'username email _id role'
-        })
-        .populate({
-          path: 'createdBy',
-          model: 'User',
-          select: 'username email _id'
-        });
-      
-      return NextResponse.json(populatedGroup, { status: 201 });
-    } catch (populateError) {
-      console.error("Error populating group:", populateError);
-      // Return the unpopulated group instead of failing completely
-      return NextResponse.json(newGroup, { status: 201 });
-    }
+    console.log("teacherId", teacherId);
+    await newGroup.save();
+    console.log("Group created:", newGroup);
+    return NextResponse.json(newGroup, { status: 201 });
   } catch (error) {
-    console.error("Error creating group:", error);
-    return NextResponse.json(
-      { error: "Error creating group" },
-      { status: 500 }
-    );
+    console.error('Error creating group:', error);
+    return NextResponse.json({ error: 'Failed to create group' }, { status: 500 });
   }
-}
+} 

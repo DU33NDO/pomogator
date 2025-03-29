@@ -27,16 +27,37 @@ export default function DashboardPage() {
   const [newGroupName, setNewGroupName] = useState("");
   const [selectedGroup, setSelectedGroup] = useState("");
   const [selectedStudent, setSelectedStudent] = useState("");
+  const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchGroups();
+
     fetchStudents();
+    
+    // Get the current user's ID from the JWT token
+    const token = localStorage.getItem("accessToken");
+    if (token) {
+      try {
+        const payload = JSON.parse(atob(token.split(".")[1]));
+        setUserId(payload.userId);
+      } catch (error) {
+        console.error("Error parsing JWT token:", error);
+      }
+    }
+    
   }, []);
 
   const fetchGroups = async () => {
     try {
-      const response = await api.get("/groups");
-      setGroups(response.data);
+      const token = localStorage.getItem("accessToken");
+      if (token) {
+        const payload = JSON.parse(atob(token.split(".")[1]));
+        if (payload.userId) {
+          console.log("payload", payload);
+          const response = await api.get(`/groups?userId=${payload.userId}`);
+          setGroups(response.data);
+        }
+      }
     } catch (error) {
       console.error("Error fetching groups:", error);
     }
@@ -53,7 +74,11 @@ export default function DashboardPage() {
 
   const handleCreateGroup = async () => {
     try {
-      await api.post("/groups", { name: newGroupName });
+      await api.post("/groups", { 
+        name: newGroupName,
+        teacherId: userId,
+        participantId: selectedStudent || undefined 
+      });
       setNewGroupName("");
       fetchGroups();
     } catch (error) {
