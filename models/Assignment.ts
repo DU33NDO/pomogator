@@ -6,8 +6,15 @@ interface ISubmission {
   fileName?: string;
   fileUrl?: string;
   submittedAt: Date;
+  status: Status;
+  grade?: number;
 }
 
+enum Status {
+  PENDING = 'pending',
+  SUBMITTED = 'submitted',
+  GRADED = 'graded'
+}
 export interface IAssignment extends Document {
   title: string;
   description: string;
