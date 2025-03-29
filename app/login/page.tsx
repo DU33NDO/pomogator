@@ -3,11 +3,16 @@
 import type React from "react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import axios from "axios";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
+import api from "@/lib/api";
+import { AxiosError } from "axios";
+
+interface LoginErrorResponse {
+  message: string;
+}
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -21,7 +26,7 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      const response = await axios.post("/api/login", { email, password });
+      const response = await api.post("/login", { email, password });
 
       if (response.status === 200) {
         const { accessToken, refreshToken } = response.data;
@@ -30,8 +35,13 @@ export default function LoginPage() {
 
         router.push("/dashboard");
       }
-    } catch (error: any) {
-      setError(error.response?.data?.message || "Login failed");
+    } catch (error: unknown) {
+      if (error instanceof AxiosError && error.response?.data) {
+        const errorData = error.response.data as LoginErrorResponse;
+        setError(errorData.message || "Login failed");
+      } else {
+        setError("Login failed");
+      }
     }
   };
 

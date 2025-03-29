@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-
-const prisma = new PrismaClient();
+import dbConnect from "@/lib/mongoose";
+import User from "@/models/User";
 
 export async function POST(request: Request) {
   const { email, password } = await request.json();
 
   try {
-    const user = await prisma.user.findUnique({ where: { email } });
+    await dbConnect();
+    const user = await User.findOne({ email });
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -25,13 +25,13 @@ export async function POST(request: Request) {
     }
 
     const accessToken = jwt.sign(
-      { userId: user.id, email: user.email, role: user.role },
+      { userId: user._id, email: user.email, role: user.role },
       process.env.JWT_SECRET || "your-secret-key",
       { expiresIn: "15m" }
     );
 
     const refreshToken = jwt.sign(
-      { userId: user.id },
+      { userId: user._id },
       process.env.JWT_REFRESH_SECRET || "your-refresh-secret-key",
       { expiresIn: "7d" }
     );
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
         accessToken,
         refreshToken,
         user: {
-          id: user.id,
+          id: user._id,
           email: user.email,
           role: user.role,
           username: user.username,

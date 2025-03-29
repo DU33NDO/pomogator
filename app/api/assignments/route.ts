@@ -1,138 +1,137 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-import jwt from "jsonwebtoken";
-import jwtDecode from "jwt-decode";
-import bcrypt from "bcryptjs";
-import { v4 as uuidv4 } from "uuid";
+import dbConnect from "@/lib/mongoose";
+import Assignment from "@/models/Assignment";
+import Group from "@/models/Group";
+import User from "@/models/User";
+import { verifyAuth } from "@/lib/auth";
+import { UserRole } from "@/models/User";
+import { Types } from "mongoose";
 
-const prisma = new PrismaClient();
-
-const verifyAuth = (request: NextRequest) => {
+// GET /api/assignments
+// Get all assignments for a user (based on their groups)
+export async function GET(request: NextRequest) {
   try {
-    const token = request.headers.get("authorization")?.split(" ")[1];
-    if (!token) return null;
-
-    return jwt.verify(token, process.env.JWT_SECRET || "your-secret-key") as {
-      userId: string;
-      role: string;
-    };
-  } catch (error) {
-    return null;
-  }
-};
-
-export async function GET(req: NextRequest) {
-  const auth = verifyAuth(req);
-  if (!auth) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  try {
-    const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("userId");
-
-    if (!userId) {
-      return NextResponse.json(
-        { error: "User ID is required" },
-        { status: 400 }
-      );
+    await dbConnect();
+    const auth = verifyAuth(request);
+    
+    if (!auth) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      include: { group: true },
+    
+    // Get all groups where the user is a participant
+    const groups = await Group.find({
+      "participants.userId": auth.userId,
     });
-
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    
+    if (!groups.length) {
+      return NextResponse.json({ assignments: [] });
     }
-
-    if (user.role === "TEACHER") {
-      const assignments = await prisma.assignment.findMany({
-        where: { teacherId: userId },
-        include: {
-          group: true,
-          teacher: {
-            select: { username: true },
-          },
-        },
-        orderBy: { createdAt: "desc" },
-      });
-      return NextResponse.json(assignments);
-    }
-
-    if (user.role === "STUDENT" && user.groupId) {
-      const assignments = await prisma.assignment.findMany({
-        where: { groupId: user.groupId },
-        include: {
-          group: true,
-          teacher: {
-            select: { username: true },
-          },
-        },
-        orderBy: { deadline: "asc" },
-      });
-      return NextResponse.json(assignments);
-    }
-
-    return NextResponse.json([]);
+    
+    const groupIds = groups.map(group => group._id);
+    
+    // Get all assignments for these groups
+    const assignments = await Assignment.find({
+      groupId: { $in: groupIds }
+    })
+    .populate({
+      path: 'groupId',
+      model: Group,
+      select: 'name slug'
+    })
+    .populate({
+      path: 'createdBy',
+      model: User,
+      select: 'username email _id'
+    })
+    .sort({ createdAt: -1 });
+    
+    return NextResponse.json({ assignments });
   } catch (error) {
-    console.error("Error fetching assignments:", error);
+    console.error("Error getting assignments:", error);
     return NextResponse.json(
-      { error: "Failed to fetch assignments" },
+      { error: "Error getting assignments" },
       { status: 500 }
     );
   }
 }
 
+// POST /api/assignments
+// Create a new assignment
 export async function POST(request: NextRequest) {
-  const auth = verifyAuth(request);
-  if (!auth || auth.role !== "TEACHER") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   try {
+    await dbConnect();
+    const auth = verifyAuth(request);
+    
+    if (!auth) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    
     const body = await request.json();
-    const { teacherId, groupId, deadline, description } = body;
-
-    console.log("Received data:", {
-      teacherId,
-      groupId,
-      deadline,
-      description,
-    });
-
-    if (!teacherId || !groupId || !deadline || !description) {
+    const { title, description, groupId, deadline } = body;
+    
+    // Validate required fields
+    if (!title || !description || !groupId) {
       return NextResponse.json(
-        {
-          error: "Missing required fields",
-          received: { teacherId, groupId, deadline, description },
-        },
+        { error: "Title, description, and groupId are required" },
         { status: 400 }
       );
     }
-
-    // Create new assignment
-    const newAssignment = await prisma.assignment.create({
-      data: {
-        teacherId,
-        groupId,
-        deadline: new Date(deadline),
-        description,
-      },
-      include: {
-        group: true,
-        teacher: {
-          select: { username: true },
-        },
-      },
+    
+    // Check if the group exists
+    const group = await Group.findById(groupId);
+    if (!group) {
+      return NextResponse.json(
+        { error: "Group not found" },
+        { status: 404 }
+      );
+    }
+    
+    // Check if the user is a teacher in this group
+    const isTeacher = group.participants.some(
+      (p: { userId: Types.ObjectId; role: UserRole }) => 
+        p.userId.toString() === auth.userId && p.role === UserRole.TEACHER
+    );
+    
+    if (!isTeacher) {
+      return NextResponse.json(
+        { error: "Only teachers can create assignments" },
+        { status: 403 }
+      );
+    }
+    
+    // Create the assignment
+    const newAssignment = new Assignment({
+      title,
+      description,
+      groupId,
+      deadline: deadline || null,
+      createdBy: auth.userId,
+      submissions: []
     });
-
-    return NextResponse.json(newAssignment, { status: 201 });
-  } catch (error) {
-    console.error("Assignment creation error:", error);
+    
+    await newAssignment.save();
+    
+    // Populate createdBy and groupId fields
+    const populatedAssignment = await Assignment.findById(newAssignment._id)
+      .populate({
+        path: 'groupId',
+        model: Group,
+        select: 'name slug'
+      })
+      .populate({
+        path: 'createdBy',
+        model: User,
+        select: 'username email _id'
+      });
+    
     return NextResponse.json(
-      { error: "Failed to create assignment" },
+      { assignment: populatedAssignment },
+      { status: 201 }
+    );
+  } catch (error) {
+    console.error("Error creating assignment:", error);
+    return NextResponse.json(
+      { error: "Error creating assignment" },
       { status: 500 }
     );
   }

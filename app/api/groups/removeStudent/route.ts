@@ -33,25 +33,9 @@ export async function POST(request: Request) {
       );
     }
     
-    // Check if student exists and is actually a student
-    const student = await User.findById(studentId);
-    if (!student) {
-      return NextResponse.json(
-        { error: "Student not found" },
-        { status: 404 }
-      );
-    }
-    
-    if (student.role !== "STUDENT") {
-      return NextResponse.json(
-        { error: "User is not a student" },
-        { status: 400 }
-      );
-    }
-    
     const updatedUser = await User.findByIdAndUpdate(
       studentId,
-      { $addToSet: { groupIds: groupId } },
+      { $pull: { groupIds: groupId } },
       { new: true }
     )
     .select("-password")
@@ -61,12 +45,19 @@ export async function POST(request: Request) {
       options: { strictPopulate: false }
     });
     
+    if (!updatedUser) {
+      return NextResponse.json(
+        { error: "Student not found" },
+        { status: 404 }
+      );
+    }
+    
     return NextResponse.json(updatedUser);
   } catch (error) {
-    console.error("Error adding student to group:", error);
+    console.error("Error removing student from group:", error);
     return NextResponse.json(
-      { error: "Error adding student to group" },
+      { error: "Error removing student from group" },
       { status: 500 }
     );
   }
-}
+} 

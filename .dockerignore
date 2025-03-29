@@ -9,4 +9,4 @@ README.md
 .dockerignore
 Dockerfile
 docker-compose.yml
-postgres_data 
+mongo_data 

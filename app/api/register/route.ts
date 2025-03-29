@@ -1,21 +1,29 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
-
-const prisma = new PrismaClient();
+import dbConnect from "@/lib/mongoose";
+import User from "@/models/User";
 
 export async function POST(request: Request) {
   const { email, password, username, role } = await request.json();
 
   try {
+    await dbConnect();
+    
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return NextResponse.json(
+        { error: "User with this email already exists" },
+        { status: 409 }
+      );
+    }
+    
     const hashedPassword = await bcrypt.hash(password, 10);
-    const user = await prisma.user.create({
-      data: {
-        email,
-        username,
-        password: hashedPassword,
-        role,
-      },
+    await User.create({
+      email,
+      username,
+      password: hashedPassword,
+      role,
     });
 
     return NextResponse.json(

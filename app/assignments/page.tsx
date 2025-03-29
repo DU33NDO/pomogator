@@ -5,56 +5,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import axios from "axios";
 import jwt from "jsonwebtoken";
-import jwtDecode from "jwt-decode";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
-
-interface Group {
-  id: string;
-  name: string;
-}
-
-interface Assignment {
-  id: string;
-  description: string;
-  deadline: string;
-  teacherId: string;
-  groupId: string;
-  teacher: {
-    username: string;
-  };
-  group: {
-    name: string;
-  };
-}
-
-interface User {
-  id: string;
-  email: string;
-  role: string;
-}
-
-interface AuthContextType {
-  user: User | null;
-  login: (accessToken: string, refreshToken: string) => void;
-  logout: () => void;
-}
+import { MongoGroup, MongoAssignment } from "@/types";
 
 export default function AssignmentsPage() {
   const { user } = useAuth();
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [groups, setGroups] = useState<Group[]>([]);
+  const [assignments, setAssignments] = useState<MongoAssignment[]>([]);
+  const [groups, setGroups] = useState<MongoGroup[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Form states
-  const [selectedGroup, setSelectedGroup] = useState("");
+  const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
   const [deadline, setDeadline] = useState("");
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -76,7 +38,13 @@ export default function AssignmentsPage() {
   const fetchAssignments = async () => {
     try {
       const token = localStorage.getItem("accessToken");
-      const response = await axios.get(`/api/assignments?userId=${user?.id}`, {
+      
+      let url = '/api/assignments';
+      if (user?.id) {
+        url += `?userId=${user.id}`;
+      }
+      
+      const response = await axios.get(url, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -102,9 +70,9 @@ export default function AssignmentsPage() {
   };
 
   const handleSubmit = async () => {
-    if (!selectedGroup || !deadline || !description || !user) {
+    if (!selectedGroups.length || !deadline || !description || !user) {
       console.log("Missing required data:", {
-        selectedGroup,
+        selectedGroups,
         deadline,
         description,
       });
@@ -129,7 +97,7 @@ export default function AssignmentsPage() {
 
       const payload = {
         teacherId,
-        groupId: selectedGroup,
+        groupIds: selectedGroups,
         deadline: formattedDeadline,
         description,
       };
@@ -146,7 +114,7 @@ export default function AssignmentsPage() {
       if (response.status === 201) {
         await fetchAssignments();
         // Reset form
-        setSelectedGroup("");
+        setSelectedGroups([]);
         setDeadline("");
         setDescription("");
       }
@@ -174,6 +142,39 @@ export default function AssignmentsPage() {
     }
   };
 
+  const handleGroupSelect = (groupId: string) => {
+    if (selectedGroups.includes(groupId)) {
+      setSelectedGroups(selectedGroups.filter(id => id !== groupId));
+    } else {
+      setSelectedGroups([...selectedGroups, groupId]);
+    }
+  };
+
+  const GroupSelection = () => (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-2">
+        Select Groups (select multiple)
+      </label>
+      <div className="space-y-2 max-h-40 overflow-y-auto p-2 border rounded">
+        {groups.map((group) => (
+          <div key={group._id.toString()} className="flex items-center">
+            <input
+              type="checkbox"
+              id={`group-${group._id.toString()}`}
+              checked={selectedGroups.includes(group._id.toString())}
+              onChange={() => handleGroupSelect(group._id.toString())}
+              className="mr-2"
+            />
+            <label htmlFor={`group-${group._id.toString()}`}>{group.name}</label>
+          </div>
+        ))}
+      </div>
+      {!selectedGroups.length && (
+        <p className="text-sm text-red-500 mt-1">Please select at least one group</p>
+      )}
+    </div>
+  );
+
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
@@ -193,23 +194,7 @@ export default function AssignmentsPage() {
               Create New Assignment
             </h2>
             <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Select Group
-                </label>
-                <Select value={selectedGroup} onValueChange={setSelectedGroup}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose a group" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {groups.map((group) => (
-                      <SelectItem key={group.id} value={group.id}>
-                        {group.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <GroupSelection />
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -237,7 +222,7 @@ export default function AssignmentsPage() {
               <Button
                 onClick={handleSubmit}
                 disabled={
-                  !selectedGroup || !deadline || !description || submitting
+                  !selectedGroups.length || !deadline || !description || submitting
                 }
                 className="w-full"
               >
@@ -262,20 +247,20 @@ export default function AssignmentsPage() {
             <ul className="space-y-4">
               {assignments.map((assignment) => (
                 <li
-                  key={assignment.id}
+                  key={assignment._id.toString()}
                   className="flex justify-between items-center p-4 border rounded-lg hover:bg-gray-50"
                 >
                   <div className="space-y-1">
                     <p className="font-medium">{assignment.description}</p>
                     <p className="text-sm text-gray-600">
-                      Group: {assignment.group.name} | Due:{" "}
+                      Group: {assignment.group?.name || "Unknown"} | Due:{" "}
                       {new Date(assignment.deadline).toLocaleString()}
                     </p>
                   </div>
 
                   {user?.role === "TEACHER" && (
                     <Button
-                      onClick={() => handleDelete(assignment.id)}
+                      onClick={() => handleDelete(assignment._id.toString())}
                       variant="destructive"
                       size="sm"
                     >

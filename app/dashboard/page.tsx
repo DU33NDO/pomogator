@@ -1,8 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import axios from "axios";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,29 +18,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
-interface Group {
-  id: string;
-  name: string;
-}
-
-interface Student {
-  id: string;
-  username: string;
-  email: string;
-  groupId: string | null;
-  group: {
-    name: string;
-  } | null;
-}
+import { MongoUser, MongoGroup } from "@/types";
+import api from "@/lib/api";
 
 export default function DashboardPage() {
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [students, setStudents] = useState<Student[]>([]);
+  const [groups, setGroups] = useState<MongoGroup[]>([]);
+  const [students, setStudents] = useState<MongoUser[]>([]);
   const [newGroupName, setNewGroupName] = useState("");
   const [selectedGroup, setSelectedGroup] = useState("");
   const [selectedStudent, setSelectedStudent] = useState("");
-  const router = useRouter();
 
   useEffect(() => {
     fetchGroups();
@@ -51,7 +35,7 @@ export default function DashboardPage() {
 
   const fetchGroups = async () => {
     try {
-      const response = await axios.get("/api/groups");
+      const response = await api.get("/groups");
       setGroups(response.data);
     } catch (error) {
       console.error("Error fetching groups:", error);
@@ -60,7 +44,7 @@ export default function DashboardPage() {
 
   const fetchStudents = async () => {
     try {
-      const response = await axios.get("/api/students");
+      const response = await api.get("/students");
       setStudents(response.data);
     } catch (error) {
       console.error("Error fetching students:", error);
@@ -69,7 +53,7 @@ export default function DashboardPage() {
 
   const handleCreateGroup = async () => {
     try {
-      await axios.post("/api/groups", { name: newGroupName });
+      await api.post("/groups", { name: newGroupName });
       setNewGroupName("");
       fetchGroups();
     } catch (error) {
@@ -79,15 +63,35 @@ export default function DashboardPage() {
 
   const handleAddStudentToGroup = async () => {
     try {
-      await axios.post("/api/groups/addStudent", {
-        groupId: selectedGroup,
-        studentId: selectedStudent,
+      await api.post(`/groups/${selectedGroup}/participants`, {
+        username: students.find(s => s._id.toString() === selectedStudent)?.username,
+        role: "STUDENT"
       });
       fetchGroups();
-      fetchStudents();
     } catch (error) {
       console.error("Error adding student to group:", error);
     }
+  };
+
+  const handleRemoveStudentFromGroup = async (studentId: string, groupId: string) => {
+    try {
+      await api.delete(`/groups/${groupId}/participants`, {
+        data: { userId: studentId }
+      });
+      fetchGroups();
+    } catch (error) {
+      console.error("Error removing student from group:", error);
+    }
+  };
+
+  // Find student groups by checking which groups have the student as a participant
+  const getStudentGroups = (studentId: string) => {
+    return groups.filter(group => 
+      group.participants.some(p => {
+        const userId = typeof p.userId === 'object' ? p.userId._id.toString() : p.userId.toString();
+        return userId === studentId;
+      })
+    );
   };
 
   return (
@@ -100,7 +104,7 @@ export default function DashboardPage() {
           <h2 className="text-2xl font-semibold mb-4">Groups</h2>
           <ul className="space-y-2">
             {groups.map((group) => (
-              <li key={group.id} className="bg-white p-4 rounded-lg shadow">
+              <li key={group._id.toString()} className="bg-white p-4 rounded-lg shadow">
                 {group.name}
               </li>
             ))}
@@ -141,7 +145,7 @@ export default function DashboardPage() {
                 </SelectTrigger>
                 <SelectContent>
                   {groups.map((group) => (
-                    <SelectItem key={group.id} value={group.id}>
+                    <SelectItem key={group._id.toString()} value={group._id.toString()}>
                       {group.name}
                     </SelectItem>
                   ))}
@@ -158,13 +162,11 @@ export default function DashboardPage() {
                   <SelectValue placeholder="Select a student" />
                 </SelectTrigger>
                 <SelectContent>
-                  {students
-                    .filter((student) => !student.groupId) // Only show students without a group
-                    .map((student) => (
-                      <SelectItem key={student.id} value={student.id}>
-                        {student.username} ({student.email})
-                      </SelectItem>
-                    ))}
+                  {students.map((student) => (
+                    <SelectItem key={student._id.toString()} value={student._id.toString()}>
+                      {student.username} ({student.email})
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -179,16 +181,42 @@ export default function DashboardPage() {
           {/* Display current students and their groups */}
           <div className="mt-8">
             <h3 className="text-xl font-semibold mb-4">Current Students</h3>
-            <ul className="space-y-2">
-              {students.map((student) => (
-                <li key={student.id} className="bg-white p-4 rounded-lg shadow">
-                  <p className="font-medium">{student.username}</p>
-                  <p className="text-sm text-gray-600">{student.email}</p>
-                  <p className="text-sm text-gray-600">
-                    Group: {student.group ? student.group.name : "Not assigned"}
-                  </p>
-                </li>
-              ))}
+            <ul className="space-y-4">
+              {students.map((student) => {
+                // Get all groups where this student is a participant
+                const studentGroups = getStudentGroups(student._id.toString());
+                
+                return (
+                  <li key={student._id.toString()} className="bg-white p-6 rounded-lg shadow">
+                    <div className="mb-2">
+                      <p className="font-medium text-lg">{student.username}</p>
+                      <p className="text-sm text-gray-600">{student.email}</p>
+                    </div>
+                    
+                    <div>
+                      <p className="font-medium mb-1">Groups:</p>
+                      {studentGroups.length > 0 ? (
+                        <ul className="space-y-1">
+                          {studentGroups.map((group) => (
+                            <li key={group._id.toString()} className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded">
+                              <span>{group.name}</span>
+                              <Button 
+                                variant="destructive" 
+                                size="sm" 
+                                onClick={() => handleRemoveStudentFromGroup(student._id.toString(), group._id.toString())}
+                              >
+                                Remove
+                              </Button>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-sm text-gray-500">Not assigned to any groups</p>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         </div>
