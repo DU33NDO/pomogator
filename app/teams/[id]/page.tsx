@@ -92,7 +92,7 @@ export default function TeamAssignments() {
               ) : isDeadlinePassed(assignment.deadline) ? (
                 <span className="text-red-600 text-sm">Deadline passed</span>
               ) : (
-                <Link href={`/assignments/${assignment._id}/submit`}>
+                <Link href={`/assignments/${assignment._id}`}>
                   <Button
                     variant="default"
                     size="sm"
