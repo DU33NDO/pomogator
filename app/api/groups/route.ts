@@ -7,10 +7,17 @@ import mongoose from 'mongoose';
 // GET route to fetch all groups for a specific user ID
 export async function GET(req: NextRequest) {
   try {
-    const userId = req.nextUrl.searchParams.get('userId');
-    console.log("userId", userId);
+    const token = req.headers.get('authorization');
+    
+    if (!token) {
+      return NextResponse.json({ error: 'Authorization token is required' }, { status: 401 });
+    }
+    
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    const userId = payload.id || payload.sub || payload.userId;
+
     if (!userId) {
-      return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
+      return NextResponse.json({ error: 'User ID not found in token' }, { status: 400 });
     }
 
     await dbConnect();

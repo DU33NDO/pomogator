@@ -8,6 +8,7 @@ import jwt from "jsonwebtoken";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
 import { MongoGroup, MongoAssignment } from "@/types";
+import api from "@/lib/api";
 
 export default function AssignmentsPage() {
   const { user } = useAuth();
@@ -35,6 +36,14 @@ export default function AssignmentsPage() {
     initializePage();
   }, [user]);
 
+  useEffect(() => {
+    const fetchInitialAssignments = async () => {
+      await fetchAssignments();
+    };
+    
+    fetchInitialAssignments();
+  }, []);
+
   const fetchAssignments = async () => {
     try {
       const token = localStorage.getItem("accessToken");
@@ -57,13 +66,16 @@ export default function AssignmentsPage() {
 
   const fetchGroups = async () => {
     try {
-      const token = localStorage.getItem("accessToken");
+      const fullToken = localStorage.getItem("accessToken");
+      const token = fullToken?.split(' ')[1] || fullToken; // Extract token after Bearer if present
+      
       const response = await axios.get("/api/groups", {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
       setGroups(response.data);
+      console.log("Fetched groups:", response.data);
     } catch (error) {
       console.error("Error fetching groups:", error);
     }
@@ -96,10 +108,10 @@ export default function AssignmentsPage() {
       }
 
       const payload = {
-        teacherId,
-        groupIds: selectedGroups,
-        deadline: formattedDeadline,
+        title: description.split('\n')[0] || 'New Assignment', // Using first line of description as title
         description,
+        groupId: selectedGroups[0], // API expects a single groupId, not an array
+        deadline: formattedDeadline,
       };
 
       console.log("Sending payload:", payload);
@@ -143,11 +155,14 @@ export default function AssignmentsPage() {
   };
 
   const handleGroupSelect = (groupId: string) => {
-    if (selectedGroups.includes(groupId)) {
-      setSelectedGroups(selectedGroups.filter((id) => id !== groupId));
-    } else {
-      setSelectedGroups([...selectedGroups, groupId]);
-    }
+    console.log("Selecting group:", groupId);
+    setSelectedGroups(prevSelected => {
+      if (prevSelected.includes(groupId)) {
+        return prevSelected.filter((id) => id !== groupId);
+      } else {
+        return [...prevSelected, groupId];
+      }
+    });
   };
 
   const GroupSelection = () => (
@@ -156,6 +171,9 @@ export default function AssignmentsPage() {
         Select Groups (select multiple)
       </label>
       <div className="space-y-2 max-h-40 overflow-y-auto p-2 border rounded">
+        {groups.length === 0 && (
+          <p className="text-sm text-gray-500">No groups available</p>
+        )}
         {groups.map((group) => (
           <div key={group._id.toString()} className="flex items-center">
             <input
@@ -163,15 +181,18 @@ export default function AssignmentsPage() {
               id={`group-${group._id.toString()}`}
               checked={selectedGroups.includes(group._id.toString())}
               onChange={() => handleGroupSelect(group._id.toString())}
-              className="mr-2"
+              className="mr-2 h-4 w-4 cursor-pointer"
             />
-            <label htmlFor={`group-${group._id.toString()}`}>
+            <label 
+              htmlFor={`group-${group._id.toString()}`}
+              className="cursor-pointer select-none"
+            >
               {group.name}
             </label>
           </div>
         ))}
       </div>
-      {!selectedGroups.length && (
+      {groups.length > 0 && !selectedGroups.length && (
         <p className="text-sm text-red-500 mt-1">
           Please select at least one group
         </p>
@@ -252,7 +273,6 @@ export default function AssignmentsPage() {
             </p>
           ) : (
             <ul className="space-y-4">
-              `{" "}
               {assignments.map((assignment) => (
                 <li
                   key={assignment._id.toString()}
@@ -261,7 +281,7 @@ export default function AssignmentsPage() {
                   <div className="space-y-1">
                     <p className="font-medium">{assignment.description}</p>
                     <p className="text-sm text-gray-600">
-                      Group: {assignment.groupId?.name || "Unknown"} | Due:{" "}
+                      Group: {assignment.groupId && typeof assignment.groupId === 'object' && 'name' in assignment.groupId ? assignment.groupId.name : "Unknown"} | Due:{" "}
                       {new Date(assignment.deadline).toLocaleString()}
                     </p>
                   </div>
@@ -277,7 +297,6 @@ export default function AssignmentsPage() {
                   )}
                 </li>
               ))}
-              `
             </ul>
           )}
         </div>

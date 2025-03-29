@@ -34,7 +34,7 @@ export default function TeamsPage() {
             if (payload.userId) {
               console.log("payload", payload);
               const response = await api.get(
-                `/groups?userId=${payload.userId}`
+                `/groups`
               );
               setGroups(response.data);
             }

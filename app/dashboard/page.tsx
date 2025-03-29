@@ -54,7 +54,7 @@ export default function DashboardPage() {
         const payload = JSON.parse(atob(token.split(".")[1]));
         if (payload.userId) {
           console.log("payload", payload);
-          const response = await api.get(`/groups?userId=${payload.userId}`);
+          const response = await api.get(`/groups`);
           setGroups(response.data);
         }
       }

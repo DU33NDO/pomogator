@@ -4,7 +4,7 @@ import Assignment from '@/models/Assignment';
 import Group from '@/models/Group';
 import { verifyAuth } from "@/lib/auth";
 import { UserRole } from '@/models/User';
-import { Types } from 'mongoose';
+import mongoose, { Types } from 'mongoose';
 
 // Interface for participant type
 interface Participant {
@@ -31,8 +31,19 @@ export async function GET(
       return NextResponse.json({ error: "Group ID is required" }, { status: 400 });
     }
     
-    // Check if the group exists and if user is a participant
-    const group = await Group.findById(groupId);
+    // Find group by id or slug depending on the input format
+    let group;
+    
+    // Check if groupId is a valid ObjectId
+    const isValidObjectId = mongoose.Types.ObjectId.isValid(groupId);
+    
+    if (isValidObjectId) {
+      group = await Group.findById(groupId);
+    } else {
+      // If not a valid ObjectId, try finding by slug
+      group = await Group.findOne({ slug: groupId });
+    }
+    
     if (!group) {
       return NextResponse.json({ error: "Group not found" }, { status: 404 });
     }
@@ -49,7 +60,7 @@ export async function GET(
     }
     
     // Get all assignments for this group
-    const assignments = await Assignment.find({ groupId })
+    const assignments = await Assignment.find({ groupId: group._id })
       .populate({
         path: 'groupId',
         model: Group,
