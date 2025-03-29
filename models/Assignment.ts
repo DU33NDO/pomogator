@@ -7,6 +7,7 @@ interface ISubmission {
   fileUrl?: string;
   submittedAt: Date;
   status: Status;
+  feedback?: string;
   grade?: number;
 }
 
