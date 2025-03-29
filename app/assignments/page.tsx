@@ -38,18 +38,18 @@ export default function AssignmentsPage() {
   const fetchAssignments = async () => {
     try {
       const token = localStorage.getItem("accessToken");
-      
-      let url = '/api/assignments';
+
+      let url = "/api/assignments";
       if (user?.id) {
         url += `?userId=${user.id}`;
       }
-      
+
       const response = await axios.get(url, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
-      setAssignments(response.data);
+      setAssignments(response.data.assignments);
     } catch (error) {
       console.error("Error fetching assignments:", error);
     }
@@ -144,7 +144,7 @@ export default function AssignmentsPage() {
 
   const handleGroupSelect = (groupId: string) => {
     if (selectedGroups.includes(groupId)) {
-      setSelectedGroups(selectedGroups.filter(id => id !== groupId));
+      setSelectedGroups(selectedGroups.filter((id) => id !== groupId));
     } else {
       setSelectedGroups([...selectedGroups, groupId]);
     }
@@ -165,12 +165,16 @@ export default function AssignmentsPage() {
               onChange={() => handleGroupSelect(group._id.toString())}
               className="mr-2"
             />
-            <label htmlFor={`group-${group._id.toString()}`}>{group.name}</label>
+            <label htmlFor={`group-${group._id.toString()}`}>
+              {group.name}
+            </label>
           </div>
         ))}
       </div>
       {!selectedGroups.length && (
-        <p className="text-sm text-red-500 mt-1">Please select at least one group</p>
+        <p className="text-sm text-red-500 mt-1">
+          Please select at least one group
+        </p>
       )}
     </div>
   );
@@ -222,7 +226,10 @@ export default function AssignmentsPage() {
               <Button
                 onClick={handleSubmit}
                 disabled={
-                  !selectedGroups.length || !deadline || !description || submitting
+                  !selectedGroups.length ||
+                  !deadline ||
+                  !description ||
+                  submitting
                 }
                 className="w-full"
               >
@@ -245,6 +252,7 @@ export default function AssignmentsPage() {
             </p>
           ) : (
             <ul className="space-y-4">
+              `{" "}
               {assignments.map((assignment) => (
                 <li
                   key={assignment._id.toString()}
@@ -253,7 +261,7 @@ export default function AssignmentsPage() {
                   <div className="space-y-1">
                     <p className="font-medium">{assignment.description}</p>
                     <p className="text-sm text-gray-600">
-                      Group: {assignment.group?.name || "Unknown"} | Due:{" "}
+                      Group: {assignment.groupId?.name || "Unknown"} | Due:{" "}
                       {new Date(assignment.deadline).toLocaleString()}
                     </p>
                   </div>
@@ -269,6 +277,7 @@ export default function AssignmentsPage() {
                   )}
                 </li>
               ))}
+              `
             </ul>
           )}
         </div>
