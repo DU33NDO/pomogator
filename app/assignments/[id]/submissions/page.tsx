@@ -7,6 +7,13 @@ import { Button } from "@/components/ui/button";
 import api from "@/lib/api";
 import Link from "next/link";
 import { Brain } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 
 interface Submission {
   userId: {
@@ -25,6 +32,7 @@ interface Assignment {
   description: string;
   deadline: string;
   submissions: Submission[];
+  aiMarkScheme?: string;
 }
 
 export default function SubmissionsPage() {
@@ -32,6 +40,10 @@ export default function SubmissionsPage() {
   const params = useParams();
   const [assignment, setAssignment] = useState<Assignment | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+  const [markScheme, setMarkScheme] = useState("");
+  const [markSchemeFile, setMarkSchemeFile] = useState<File | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   useEffect(() => {
     fetchAssignmentWithSubmissions();
@@ -39,14 +51,43 @@ export default function SubmissionsPage() {
 
   const fetchAssignmentWithSubmissions = async () => {
     try {
-      const response = await api.get(
-        `/assignments/${params.id}/submissions`
-      );
+      const response = await api.get(`/assignments/${params.id}/submissions`);
       setAssignment(response.data);
     } catch (error) {
       console.error("Error fetching submissions:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAIAnalysis = async () => {
+    setIsAnalyzing(true);
+    try {
+      let formData = new FormData();
+      formData.append("action", "evaluate");
+
+      if (markSchemeFile) {
+        formData.append("file", markSchemeFile);
+      }
+      if (markScheme) {
+        formData.append("text", markScheme);
+      }
+
+      const aiResponse = await api.post("/api/ai", formData);
+
+      await api.post(`/assignments/${params.id}/ai-feedback`, {
+        aiMarkScheme: aiResponse.data.evaluation,
+      });
+
+      await fetchAssignmentWithSubmissions();
+
+      setIsAIModalOpen(false);
+      setMarkScheme("");
+      setMarkSchemeFile(null);
+    } catch (error) {
+      console.error("AI Analysis error:", error);
+    } finally {
+      setIsAnalyzing(false);
     }
   };
 
@@ -72,6 +113,7 @@ export default function SubmissionsPage() {
         <Button
           className="bg-purple-600 hover:bg-purple-700 text-white flex items-center gap-2"
           size="lg"
+          onClick={() => setIsAIModalOpen(true)}
         >
           <Brain className="w-5 h-5" />
           AI Analyze
@@ -133,6 +175,52 @@ export default function SubmissionsPage() {
           )}
         </div>
       </div>
+
+      <Dialog open={isAIModalOpen} onOpenChange={setIsAIModalOpen}>
+        <DialogContent className="sm:max-w-[525px]">
+          <DialogHeader>
+            <DialogTitle>AI Analysis Setup</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 mt-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Mark Scheme Text
+              </label>
+              <Textarea
+                value={markScheme}
+                onChange={(e) => setMarkScheme(e.target.value)}
+                placeholder="Enter mark scheme or grading criteria..."
+                className="min-h-[100px]"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Or Upload Mark Scheme File
+              </label>
+              <input
+                type="file"
+                onChange={(e) => setMarkSchemeFile(e.target.files?.[0] || null)}
+                className="w-full"
+                accept=".pdf,.doc,.docx,.txt"
+              />
+            </div>
+
+            <div className="flex justify-end space-x-3 mt-6">
+              <Button variant="outline" onClick={() => setIsAIModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleAIAnalysis}
+                disabled={isAnalyzing || (!markScheme && !markSchemeFile)}
+              >
+                {isAnalyzing ? "Analyzing..." : "Start Analysis"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
