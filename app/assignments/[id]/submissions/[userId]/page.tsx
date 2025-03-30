@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import api from "@/lib/api";
+import { MarkdownViewer } from "@/components/ui/markdown-viewer";
 
 interface Submission {
   content: string;
@@ -13,6 +13,7 @@ interface Submission {
   fileName?: string;
   submittedAt: string;
   feedback?: string;
+  grade?: number;
   userId: {
     username: string;
     email: string;
@@ -26,11 +27,11 @@ interface Assignment {
 }
 
 export default function SubmissionPage() {
-  const { user } = useAuth();
   const params = useParams();
   const [submission, setSubmission] = useState<Submission | null>(null);
   const [assignment, setAssignment] = useState<Assignment | null>(null);
   const [editedFeedback, setEditedFeedback] = useState("");
+  const [grade, setGrade] = useState<number | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -49,6 +50,7 @@ export default function SubmissionPage() {
       setAssignment(assignmentRes.data);
       setSubmission(submissionRes.data);
       setEditedFeedback(submissionRes.data.feedback || "");
+      setGrade(submissionRes.data.grade);
     } catch (error) {
       console.error("Error fetching data:", error);
     } finally {
@@ -63,6 +65,7 @@ export default function SubmissionPage() {
         `/assignments/${params.id}/submissions/${params.userId}/feedback`,
         {
           feedback: editedFeedback,
+          grade: grade
         }
       );
       await fetchData(); // Refresh data
@@ -97,9 +100,9 @@ export default function SubmissionPage() {
           </div>
 
           <div className="bg-white rounded-lg shadow-md p-6">
-            <h3 className="font-semibold mb-4">Student's Answer</h3>
-            <div className="whitespace-pre-wrap text-gray-700">
-              {submission?.content}
+            <h3 className="font-semibold mb-4">Student&apos;s Answer</h3>
+            <div className="text-gray-700">
+              <MarkdownViewer content={submission?.content || ""} />
             </div>
 
             {submission?.fileUrl && (
@@ -122,29 +125,54 @@ export default function SubmissionPage() {
           {assignment?.aiMarkScheme && (
             <div className="bg-white rounded-lg shadow-md p-6">
               <h3 className="font-semibold mb-4">AI Mark Scheme</h3>
-              <div className="text-gray-700 mb-6 whitespace-pre-wrap">
-                {assignment.aiMarkScheme}
+              <div className="text-gray-700 mb-6">
+                <MarkdownViewer content={assignment.aiMarkScheme} />
               </div>
             </div>
           )}
 
           <div className="bg-white rounded-lg shadow-md p-6">
-            <h3 className="font-semibold mb-4">Teacher's Feedback</h3>
+            <h3 className="font-semibold mb-4">Teacher&apos;s Feedback</h3>
             <Textarea
               value={editedFeedback}
               onChange={(e) => setEditedFeedback(e.target.value)}
               className="min-h-[200px] mb-4"
               placeholder="Add your feedback here..."
             />
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Grade
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                value={grade || ""}
+                onChange={(e) => setGrade(e.target.value ? parseInt(e.target.value, 10) : undefined)}
+                className="w-full p-2 border border-gray-300 rounded-md"
+                placeholder="Enter grade (0-100)"
+              />
+            </div>
 
             <Button
               onClick={handleSaveFeedback}
               disabled={saving}
               className="w-full"
             >
-              {saving ? "Saving..." : "Save Feedback"}
+              {saving ? "Saving..." : "Save Feedback & Grade"}
             </Button>
           </div>
+
+          {/* Preview of formatted feedback */}
+          {editedFeedback && (
+            <div className="bg-white rounded-lg shadow-md p-6 mt-4">
+              <h3 className="font-semibold mb-4">Feedback Preview</h3>
+              <div className="border border-gray-200 rounded-md">
+                <MarkdownViewer content={editedFeedback} isTeacherFeedback={true} />
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

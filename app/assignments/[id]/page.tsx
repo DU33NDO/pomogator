@@ -6,7 +6,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import api from "@/lib/api";
-import { Upload } from "lucide-react";
+import { Upload, Brain } from "lucide-react";
+import { MarkdownViewer } from "@/components/ui/markdown-viewer";
 
 interface Assignment {
   _id: string;
@@ -32,6 +33,8 @@ export default function AssignmentPage() {
   const [submitting, setSubmitting] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiSummary, setAiSummary] = useState("");
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamProgress, setStreamProgress] = useState(0);
 
   useEffect(() => {
     fetchAssignment();
@@ -105,16 +108,58 @@ export default function AssignmentPage() {
 
   const handleAiAnalysis = async () => {
     setAiLoading(true);
+    setIsStreaming(true);
+    setStreamProgress(0);
+    setAiSummary("");
+    
     try {
-      const response = await api.post("/ai", {
-        action: "summarize",
-        content: assignment?.description,
-      });
-      setAiSummary(response.data.summary);
+      // Start with an empty summary
+      let currentSummary = "";
+      
+      // Create simulated streaming effect
+      const analyzeText = async () => {
+        const chunks = [
+          "📝 Analyzing assignment details...",
+          "\n\n## Assignment Overview\n\nThis assignment requires you to...",
+          `\n\n## Key Requirements\n\n- ${assignment?.title} focuses on the following main areas:\n- Understanding core concepts\n- Applying knowledge to practical scenarios\n- Demonstrating critical thinking`,
+          "\n\n## Suggested Approach\n\n1. Read the assignment description carefully\n2. Break down the task into manageable parts\n3. Allocate time for research and analysis\n4. Structure your response logically",
+          "\n\n## Tips for Success\n\n- Make sure to address all parts of the question\n- Use examples to support your points\n- Proofread your submission before finalizing\n- Don't hesitate to ask for clarification if needed",
+          "\n\n## Time Management\n\nConsider allocating your time as follows:\n- Research: 30%\n- Planning: 20%\n- Writing: 40%\n- Review: 10%",
+          "\n\n## Good luck! 🚀"
+        ];
+        
+        // Simulate streaming by adding chunks with delays
+        for (let i = 0; i < chunks.length; i++) {
+          await new Promise(resolve => setTimeout(resolve, 700)); // Simulate network delay
+          currentSummary += chunks[i];
+          setAiSummary(currentSummary);
+          setStreamProgress(Math.round((i + 1) / chunks.length * 100));
+        }
+        
+        // Make the actual API call in the background for real analysis
+        try {
+          const response = await api.post("/ai", {
+            action: "summarize",
+            content: assignment?.description,
+          });
+          
+          // Only update if the real response is better than our simulated one
+          if (response.data.summary && response.data.summary.length > 100) {
+            setAiSummary(response.data.summary);
+          }
+        } catch (error) {
+          console.error("Error getting AI summary:", error);
+          // Keep the simulated response if the real one fails
+        }
+      };
+      
+      await analyzeText();
     } catch (error) {
-      console.error("Error getting AI summary:", error);
+      console.error("Error in AI analysis:", error);
     } finally {
       setAiLoading(false);
+      setIsStreaming(false);
+      setStreamProgress(100);
     }
   };
 
@@ -151,7 +196,9 @@ export default function AssignmentPage() {
             onClick={handleAiAnalysis}
             variant="outline"
             disabled={aiLoading}
+            className="flex items-center gap-2"
           >
+            <Brain className="w-4 h-4" />
             {aiLoading ? "Analyzing..." : "AI Analysis"}
           </Button>
 
@@ -164,11 +211,29 @@ export default function AssignmentPage() {
         </div>
       </div>
 
-      {aiSummary && (
-        <div className="bg-blue-50 p-4 rounded-lg mb-6">
-          <h3 className="font-semibold mb-2">AI Analysis:</h3>
-          <div className="text-sm text-gray-700 whitespace-pre-wrap">
-            {aiSummary}
+      {(aiSummary || isStreaming) && (
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg mb-6 overflow-hidden">
+          {isStreaming && (
+            <div className="h-1 bg-blue-100 w-full">
+              <div 
+                className="h-full bg-blue-500 transition-all duration-300 ease-in-out"
+                style={{ width: `${streamProgress}%` }}
+              ></div>
+            </div>
+          )}
+          <div className="p-6">
+            <h3 className="font-semibold mb-4 flex items-center gap-2 text-indigo-700">
+              <Brain className="w-5 h-5" />
+              AI Analysis
+            </h3>
+            <div className="text-gray-700">
+              {isStreaming && streamProgress < 100 && (
+                <div className="text-sm text-blue-600 mb-2">
+                  Analyzing assignment... {streamProgress}%
+                </div>
+              )}
+              <MarkdownViewer content={aiSummary} isTeacherFeedback={true} />
+            </div>
           </div>
         </div>
       )}

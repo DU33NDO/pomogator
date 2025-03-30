@@ -1,7 +1,7 @@
-
 import type React from "react";
 import { Geist, Azeret_Mono as Geist_Mono } from "next/font/google";
 import "./globals.css";
+import "../styles/markdown.css";
 import { AuthProvider } from "../contexts/AuthContext";
 import Header from "@/components/header";
 

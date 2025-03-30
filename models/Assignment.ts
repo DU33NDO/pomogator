@@ -24,6 +24,7 @@ export interface IAssignment extends Document {
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
   submissions: ISubmission[];
+  aiMarkScheme?: string;
 }
 
 const SubmissionSchema = new Schema({
@@ -48,7 +49,8 @@ const AssignmentSchema: Schema = new Schema({
   groupId: { type: Schema.Types.ObjectId, ref: 'Group', required: true },
   deadline: { type: Date, required: true },
   createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-  submissions: [SubmissionSchema]
+  submissions: [SubmissionSchema],
+  aiMarkScheme: { type: String }
 }, { timestamps: true });
 
 // Delete the model if it exists to prevent the cached schema issue

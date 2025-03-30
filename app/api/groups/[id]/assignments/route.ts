@@ -24,7 +24,7 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     
-    const groupId = params.id;
+    const groupId = await params.id;
     
     // Validate the groupId
     if (!groupId) {
