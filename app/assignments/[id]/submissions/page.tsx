@@ -64,8 +64,9 @@ export default function SubmissionsPage() {
   const handleAIAnalysis = async () => {
     setIsAnalyzing(true);
     try {
-      let formData = new FormData();
+      const formData = new FormData();
       formData.append("action", "evaluate");
+      formData.append("assignmentId", params.id as string);
 
       if (markSchemeFile) {
         formData.append("file", markSchemeFile);
@@ -74,7 +75,11 @@ export default function SubmissionsPage() {
         formData.append("text", markScheme);
       }
 
-      const aiResponse = await api.post("/api/ai", formData);
+      const aiResponse = await api.post("/ai/generate-report", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
 
       await api.post(`/assignments/${params.id}/ai-feedback`, {
         aiMarkScheme: aiResponse.data.evaluation,
