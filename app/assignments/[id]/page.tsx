@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import api from "@/lib/api";
-import { Upload, Brain } from "lucide-react";
+import { Upload, Brain, MessageSquare } from "lucide-react";
 import { MarkdownViewer } from "@/components/ui/markdown-viewer";
 
 interface Assignment {
@@ -20,6 +20,8 @@ interface Assignment {
     fileName?: string;
     fileUrl?: string;
     submittedAt: string;
+    feedback?: string;
+    grade?: number;
   }[];
 }
 
@@ -35,27 +37,68 @@ export default function AssignmentPage() {
   const [aiSummary, setAiSummary] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamProgress, setStreamProgress] = useState(0);
-
+  const [feedback, setFeedback] = useState<string | undefined>("");
+  const [grade, setGrade] = useState<number | undefined>(undefined);
+  const [loadingFeedback, setLoadingFeedback] = useState(false);
+  
   useEffect(() => {
     fetchAssignment();
   }, [params.id]);
 
+  useEffect(() => {
+    const token = localStorage.getItem("accessToken");
+    if (token) {
+      console.log(token);
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      const userIdFromToken = payload.userId;
+      console.log(userIdFromToken);
+      if (userIdFromToken) {
+        fetchSubmissionDetails(userIdFromToken);
+      }
+    }
+  }, []);
   const fetchAssignment = async () => {
     try {
       const response = await api.get(`/assignments/${params.id}`);
       setAssignment(response.data);
 
       const userSubmission = response.data.submissions.find(
-        (sub: { userId: string; content: string; fileName?: string; fileUrl?: string; submittedAt: string }) => 
+        (sub: { userId: string; content: string; fileName?: string; fileUrl?: string; submittedAt: string; feedback?: string; grade?: number; }) => 
           sub.userId === user?.id
       );
       if (userSubmission) {
         setAnswer(userSubmission.content || "");
+        if (userSubmission.feedback) setFeedback(userSubmission.feedback);
+        if (userSubmission.grade !== undefined) setGrade(userSubmission.grade);
+        
+        fetchSubmissionDetails(userSubmission.userId);
       }
     } catch (error) {
       console.error("Error fetching assignment:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchSubmissionDetails = async (userId: string) => {
+    if (userId === undefined) return;
+    console.log("bruh", userId);
+    setLoadingFeedback(true);
+    try {
+      const response = await api.get(`/assignments/${params.id}/submissions/${userId}`);
+      console.log(response.data);
+      if (response.data) {
+        if (response.data.feedback) {
+          setFeedback(response.data.feedback);
+        }
+        if (response.data.grade !== undefined) {
+          setGrade(response.data.grade);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching submission details:", error);
+    } finally {
+      setLoadingFeedback(false);
     }
   };
 
@@ -244,6 +287,46 @@ export default function AssignmentPage() {
           {assignment?.description}
         </p>
       </div>
+
+      {/* Feedback and Grade Section */}
+      {(feedback || grade !== undefined || loadingFeedback) && (
+        <div className="bg-white rounded-lg shadow-md p-6 mb-6 border-l-4 border-blue-500">
+          <h2 className="text-xl font-semibold mb-4 flex items-center">
+            <MessageSquare className="w-5 h-5 mr-2 text-blue-500" />
+            Teacher Feedback
+            {loadingFeedback && (
+              <span className="ml-2 text-sm font-normal text-gray-500">Loading...</span>
+            )}
+          </h2>
+          
+          {loadingFeedback ? (
+            <div className="animate-pulse space-y-2">
+              <div className="h-4 bg-gray-200 rounded w-1/4"></div>
+              <div className="h-20 bg-gray-200 rounded"></div>
+            </div>
+          ) : (
+            <>
+              {grade !== undefined ? (
+                <div className="mb-4">
+                  <span className="font-medium">Grade: </span>
+                  <span className="text-lg bg-blue-50 px-3 py-1 rounded-full">{grade}/100</span>
+                </div>
+              ) : null}
+              
+              {feedback ? (
+                <div className="mt-2">
+                  <h3 className="font-medium mb-2">Feedback:</h3>
+                  <div className="bg-gray-50 p-4 rounded-md">
+                    <MarkdownViewer content={feedback} isTeacherFeedback={true} />
+                  </div>
+                </div>
+              ) : !loadingFeedback && (
+                <p className="text-gray-500 italic">No feedback available yet.</p>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       <div className="bg-white rounded-lg shadow-md p-6">
         <h2 className="text-xl font-semibold mb-4">Your Answer</h2>
