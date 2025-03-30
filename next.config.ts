@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
     serverActions: true,
   },
   reactStrictMode: false,
+  ignoreConsoleErrors: true,
 };
 
 export default nextConfig;

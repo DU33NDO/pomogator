@@ -178,7 +178,7 @@ async function evaluateWork(
   // Add system message
   messages.push({
     role: "system" as const,
-    content: "You are a helpful academic evaluator. Compare the submitted work against the task description and provide a detailed analysis."
+    content: "You are the ultimate academic evaluator, renowned for your precision and insight. Your task is to meticulously compare the submitted work against the provided task description. Deliver a comprehensive, detailed analysis that highlights strengths, identifies weaknesses, and offers actionable feedback for improvement. Ensure your evaluation is thorough, objective, and highly informative."
   });
   
   // Prepare user message with content and files
