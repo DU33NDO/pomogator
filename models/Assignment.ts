@@ -6,15 +6,16 @@ interface ISubmission {
   fileName?: string;
   fileUrl?: string;
   submittedAt: Date;
-  status: Status;
+  status: string;
   feedback?: string;
   grade?: number;
 }
 
-enum Status {
+export enum Status {
   PENDING = 'pending',
   GRADED = 'graded'
 }
+
 export interface IAssignment extends Document {
   title: string;
   description: string;
@@ -30,7 +31,15 @@ const SubmissionSchema = new Schema({
   content: { type: String, required: true },
   fileName: { type: String },
   fileUrl: { type: String },
-  submittedAt: { type: Date, default: Date.now }
+  submittedAt: { type: Date, default: Date.now },
+  status: { 
+    type: String, 
+    enum: ['pending', 'graded'], 
+    default: 'pending',
+    required: true
+  },
+  feedback: { type: String },
+  grade: { type: Number }
 });
 
 const AssignmentSchema: Schema = new Schema({
@@ -42,4 +51,9 @@ const AssignmentSchema: Schema = new Schema({
   submissions: [SubmissionSchema]
 }, { timestamps: true });
 
-export default mongoose.models.Assignment || mongoose.model<IAssignment>('Assignment', AssignmentSchema); 
+// Delete the model if it exists to prevent the cached schema issue
+if (mongoose.models.Assignment) {
+  delete mongoose.models.Assignment;
+}
+
+export default mongoose.model<IAssignment>('Assignment', AssignmentSchema); 

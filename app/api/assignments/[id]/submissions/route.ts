@@ -164,11 +164,15 @@ export async function POST(
     const submission = {
       userId: auth.userId,
       content,
-      status: "pending",
       fileName: fileName || null,
       fileUrl: fileUrl || null,
-      submittedAt: new Date()
+      submittedAt: new Date(),
+      status: 'pending',
+      feedback: null,
+      grade: null
     };
+
+    console.log("Creating submission with data:", submission);
     
     // Update or add submission
     if (existingSubmissionIndex !== -1) {
@@ -177,7 +181,9 @@ export async function POST(
       assignment.submissions.push(submission);
     }
     
+    console.log("Assignment submissions before save:", assignment.submissions);
     await assignment.save();
+    console.log("Assignment saved successfully");
     
     // Populate the user details in the submission
     const updatedAssignment = await Assignment.findById(id)

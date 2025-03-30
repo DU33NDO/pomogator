@@ -81,9 +81,7 @@ export default function SubmissionsPage() {
       <div className="container mx-auto px-4 max-w-4xl">
         <div className="mb-8">
           <h1 className="text-2xl font-bold mb-2">{assignment?.title}</h1>
-          <p className="text-gray-600">
-            Deadline: {new Date(assignment?.deadline || "").toLocaleString()}
-          </p>
+
           <p className="text-gray-600">
             Total Submissions: {assignment?.submissions.length || 0}
           </p>
