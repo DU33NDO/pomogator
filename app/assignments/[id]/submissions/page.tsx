@@ -40,7 +40,7 @@ export default function SubmissionsPage() {
   const fetchAssignmentWithSubmissions = async () => {
     try {
       const response = await api.get(
-        `/api/assignments/${params.id}/submissions`
+        `/assignments/${params.id}/submissions`
       );
       setAssignment(response.data);
     } catch (error) {
@@ -112,8 +112,8 @@ export default function SubmissionsPage() {
                       : "bg-yellow-100 text-yellow-800"
                   }`}
                 >
-                  {submission.status.charAt(0).toUpperCase() +
-                    submission.status.slice(1)}
+                  {(submission.status || "unknown").charAt(0).toUpperCase() +
+                    (submission.status || "unknown").slice(1)}
                 </span>
               </div>
 

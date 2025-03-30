@@ -13,7 +13,6 @@ interface ISubmission {
 
 enum Status {
   PENDING = 'pending',
-  SUBMITTED = 'submitted',
   GRADED = 'graded'
 }
 export interface IAssignment extends Document {

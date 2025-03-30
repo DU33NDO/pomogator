@@ -16,6 +16,7 @@ interface Assignment {
   submissions: {
     userId: string;
     content: string;
+    fileName?: string;
     fileUrl?: string;
     submittedAt: string;
   }[];
@@ -42,7 +43,8 @@ export default function AssignmentPage() {
       setAssignment(response.data);
 
       const userSubmission = response.data.submissions.find(
-        (sub: any) => sub.userId === user?.id
+        (sub: { userId: string; content: string; fileName?: string; fileUrl?: string; submittedAt: string }) => 
+          sub.userId === user?.id
       );
       if (userSubmission) {
         setAnswer(userSubmission.content || "");
@@ -59,14 +61,17 @@ export default function AssignmentPage() {
       const formData = new FormData();
       formData.append("file", file);
 
-      // Upload to Google Cloud Storage
+      // Upload to local storage
       const response = await api.post("/upload", formData, {
         headers: {
           "Content-Type": "multipart/form-data",
         },
       });
 
-      return response.data.fileUrl;
+      return {
+        fileUrl: response.data.fileUrl,
+        fileName: response.data.fileName
+      };
     } catch (error) {
       console.error("Error uploading file:", error);
       throw error;
@@ -78,14 +83,16 @@ export default function AssignmentPage() {
 
     setSubmitting(true);
     try {
-      let fileUrl = "";
+      let fileData = { fileUrl: "", fileName: "" };
+      
       if (file) {
-        fileUrl = await handleFileUpload(file);
+        fileData = await handleFileUpload(file);
       }
 
       await api.post(`/assignments/${params.id}/submissions`, {
         content: answer,
-        fileUrl,
+        fileUrl: fileData.fileUrl,
+        fileName: fileData.fileName
       });
 
       await fetchAssignment();
@@ -182,6 +189,22 @@ export default function AssignmentPage() {
           placeholder="Write your answer here..."
           className="min-h-[200px] mb-4"
         />
+
+        {/* Show current submission file if it exists */}
+        {assignment?.submissions?.find(sub => sub.userId === user?.id)?.fileUrl && (
+          <div className="mb-4 p-3 bg-gray-50 rounded-md">
+            <p className="text-sm font-medium mb-1">Current uploaded file:</p>
+            <a 
+              href={assignment.submissions.find(sub => sub.userId === user?.id)?.fileUrl} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:underline flex items-center"
+            >
+              <Upload className="h-4 w-4 mr-1" />
+              {assignment.submissions.find(sub => sub.userId === user?.id)?.fileName || 'Download File'}
+            </a>
+          </div>
+        )}
 
         <div className="flex items-center space-x-4">
           <input

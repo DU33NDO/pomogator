@@ -21,7 +21,7 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     
-    const { id } = params;
+    const { id } = await params;
     
     // Validate assignment ID
     if (!Types.ObjectId.isValid(id)) {

@@ -21,7 +21,7 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     
-    const { id } = params;
+    const { id } = await params;
     
     // Validate assignment ID
     if (!Types.ObjectId.isValid(id)) {
@@ -103,7 +103,7 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     
-    const { id } = params;
+    const { id } = await params;
     
     // Validate assignment ID
     if (!Types.ObjectId.isValid(id)) {
@@ -164,6 +164,7 @@ export async function POST(
     const submission = {
       userId: auth.userId,
       content,
+      status: "pending",
       fileName: fileName || null,
       fileUrl: fileUrl || null,
       submittedAt: new Date()

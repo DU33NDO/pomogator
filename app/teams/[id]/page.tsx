@@ -48,7 +48,8 @@ export default function TeamAssignments() {
 
   const fetchAssignments = async () => {
     try {
-      const response = await api.get(`/groups/${params.id}/assignments`);
+      const groupId = params.id;
+      const response = await api.get(`/groups/${groupId}/assignments`);
       setAssignments(response.data.assignments);
     } catch (error) {
       console.error("Error fetching assignments:", error);
