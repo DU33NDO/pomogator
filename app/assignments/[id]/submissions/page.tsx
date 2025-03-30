@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import LoadingBars from "@/components/LoadingBar";
 
 interface Submission {
   userId: {
@@ -63,9 +64,8 @@ export default function SubmissionsPage() {
   const handleAIAnalysis = async () => {
     setIsAnalyzing(true);
     try {
-      const formData = new FormData();
+      let formData = new FormData();
       formData.append("action", "evaluate");
-      formData.append("assignmentId", params.id as string);
 
       if (markSchemeFile) {
         formData.append("file", markSchemeFile);
@@ -74,11 +74,7 @@ export default function SubmissionsPage() {
         formData.append("text", markScheme);
       }
 
-      const aiResponse = await api.post("/ai/generate-report", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
+      const aiResponse = await api.post("/api/ai", formData);
 
       await api.post(`/assignments/${params.id}/ai-feedback`, {
         aiMarkScheme: aiResponse.data.evaluation,
@@ -97,11 +93,7 @@ export default function SubmissionsPage() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p className="text-gray-600">Loading submissions...</p>
-      </div>
-    );
+    return <LoadingBars />;
   }
 
   if (user?.role !== "TEACHER") {
