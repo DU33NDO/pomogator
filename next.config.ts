@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
   experimental: {
     serverActions: true,
   },
+  reactStrictMode: false,
 };
 
 export default nextConfig;
