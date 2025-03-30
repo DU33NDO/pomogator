@@ -72,7 +72,7 @@ export default function TeamsPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {groups.map((group) => (
           <Link
-            href={`/teams/${group.slug}`}
+            href={`/teams/${group._id}`}
             key={group._id}
             className="block bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300 overflow-hidden border border-gray-200 hover:-translate-y-1 transform transition-transform"
           >
