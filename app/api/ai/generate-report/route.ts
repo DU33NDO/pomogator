@@ -9,6 +9,13 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// Debug: Check if API key is loaded
+console.log("OpenAI API Key exists:", !!process.env.OPENAI_API_KEY);
+console.log(
+  "OpenAI API Key starts with:",
+  process.env.OPENAI_API_KEY?.substring(0, 10)
+);
+
 export async function POST(request: NextRequest) {
   try {
     const auth = verifyAuth(request);
@@ -27,7 +34,7 @@ export async function POST(request: NextRequest) {
       const formData = await request.formData();
       action = formData.get("action") as string;
       assignmentId = formData.get("assignmentId") as string;
-      const markSchemeText = formData.get("text") as string || "";
+      const markSchemeText = (formData.get("text") as string) || "";
       markSchemeFile = formData.get("file") as File | null;
       markScheme = markSchemeText;
     } catch (error) {
@@ -74,8 +81,8 @@ export async function POST(request: NextRequest) {
 
     // Get the assignment with all submissions
     const assignment = await Assignment.findById(assignmentId).populate({
-      path: 'submissions.userId',
-      select: 'username email _id'
+      path: "submissions.userId",
+      select: "username email _id",
     });
 
     if (!assignment) {
@@ -100,37 +107,29 @@ export async function POST(request: NextRequest) {
     }
 
     // Process each submission with OpenAI
-    const evaluationPromises = assignment.submissions.map(async (submission: {
-      _id: Types.ObjectId;
-      userId: {
-        _id: Types.ObjectId;
-        username: string;
-        email: string;
-      };
-      content: string;
-      feedback: string;
-      status: string;
-    }) => {
-      // Generate feedback using OpenAI
-      const feedback = await generateSubmissionFeedback(
-        assignment.title,
-        assignment.description,
-        markScheme,
-        submission.content,
-        submission.userId.username
-      );
+    const evaluationPromises = assignment.submissions.map(
+      async (submission: any) => {
+        // Generate feedback using OpenAI
+        const feedback = await generateSubmissionFeedback(
+          assignment.title,
+          assignment.description,
+          markScheme,
+          submission.content,
+          submission.userId.username
+        );
 
-      // Update the submission with the feedback
-      submission.feedback = feedback;
-      submission.status = 'graded';
-      
-      return {
-        submissionId: submission._id,
-        userId: submission.userId._id,
-        username: submission.userId.username,
-        feedback
-      };
-    });
+        // Update the submission with the feedback
+        submission.feedback = feedback;
+        submission.status = "graded";
+
+        return {
+          submissionId: submission._id,
+          userId: submission.userId._id,
+          username: submission.userId.username,
+          feedback,
+        };
+      }
+    );
 
     // Wait for all evaluations to complete
     const evaluationResults = await Promise.all(evaluationPromises);
@@ -146,15 +145,16 @@ export async function POST(request: NextRequest) {
 - Generated on: ${new Date().toLocaleString()}
 
 ## Individual Results
-${evaluationResults.map(result => `- ${result.username}: Feedback generated`).join('\n')}
+${evaluationResults
+  .map((result) => `- ${result.username}: Feedback generated`)
+  .join("\n")}
 
 Use the "View Submission" button to see detailed feedback for each student.`;
 
     return NextResponse.json({
       evaluation: evaluationSummary,
-      results: evaluationResults
+      results: evaluationResults,
     });
-
   } catch (error) {
     console.error("Error generating reports:", error);
     return NextResponse.json(
@@ -212,7 +212,7 @@ Please evaluate this submission against the mark scheme and provide detailed, st
     model: "gpt-4o",
     messages: [
       { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt }
+      { role: "user", content: userPrompt },
     ],
     temperature: 0.7,
     max_tokens: 1500,

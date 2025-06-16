@@ -7,15 +7,11 @@ const api = axios.create({
   },
 });
 
-// Add a request interceptor
 api.interceptors.request.use(
   (config) => {
-    // Check if we're in the browser
     if (typeof window !== "undefined") {
-      // Get token from localStorage (AuthContext stores it as accessToken)
       const token = localStorage.getItem("accessToken");
-      
-      // If token exists, add it to the headers
+
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
       }
@@ -27,4 +23,4 @@ api.interceptors.request.use(
   }
 );
 
-export default api; 
+export default api;
